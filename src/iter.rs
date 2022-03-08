@@ -288,14 +288,20 @@ impl RRuleIter {
                     }
                 }
             } else {
-                let ndays = mappings::days_in_month(leap_year, month1 - 1)
+                let days_in_month = mappings::days_in_month(leap_year, month1 - 1)
                     .expect("valid months from 1 to 12") as i32;
 
-                for &month_day in &self.recur.by_month_day {
-                    let date = if month_day > 0 {
-                        NaiveDate::from_ymd_opt(self.year, month1, month_day as u32)
-                    } else if month_day < 0 && month_day <= ndays {
-                        NaiveDate::from_ymd_opt(self.year, month1, (ndays + month_day) as u32)
+                for &by_month_day in &self.recur.by_month_day {
+                    let date = if by_month_day > 0 {
+                        NaiveDate::from_ymd_opt(self.year, month1, by_month_day as u32)
+                    } else if by_month_day < 0 && -by_month_day <= days_in_month {
+                        let by_month_day = (-by_month_day) - 1;
+
+                        NaiveDate::from_ymd_opt(
+                            self.year,
+                            month1,
+                            (days_in_month - by_month_day) as u32,
+                        )
                     } else {
                         None
                     };
@@ -390,13 +396,17 @@ impl RRuleIter {
     fn by_day_allows(&self, month1: u32, yearday: i32) -> bool {
         assert!(yearday >= 0);
 
-        self.recur.by_day.iter().any(|by_day| {
-            // this can be solved without iteration
-            // via ((yearday - base_offset) % 7) == 0 or something
-            by_day
-                .days_in_month(self.year, month1)
-                .any(|yd| yd == yearday)
-        })
+        if self.recur.by_day.is_empty() {
+            true
+        } else {
+            self.recur.by_day.iter().any(|by_day| {
+                // this can be solved without iteration
+                // via ((yearday - base_offset) % 7) == 0 or something
+                by_day
+                    .days_in_month(self.year, month1)
+                    .any(|yd| yd == yearday)
+            })
+        }
     }
 
     fn to_yield(&self, datetime: NaiveDateTime) -> RRuleIterYield {
