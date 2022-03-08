@@ -11,33 +11,42 @@ use chrono_tz::Tz;
 use std::cmp::Ordering;
 
 pub struct RRuleIter {
-    // constant
+    // recurrence rules
     recur: Recur,
-    tz: Option<Tz>,
 
-    dt_start_dt: DateTime<Tz>,
+    // DTSTART as DateTime<Tz>
+    // If DTSTART is floating the timezone is UTC
+    dt_start: DateTime<Tz>,
+
+    // Timezone of DTSTART, None if DTSTART is floating
+    dt_start_tz: Option<Tz>,
 
     freq: Frequency,
     interval: u32,
     count: Option<u32>,
     week_start: Weekday,
 
-    // changing with progress
     step: fn(&mut RRuleIter),
 
-    year: i32,
-
-    days: Vec<i32>,
-    days_idx: usize,
-
     hours: Vec<u32>,
-    hours_idx: usize,
-
     minutes: Vec<u32>,
-    minutes_idx: usize,
-
     seconds: Vec<u32>,
+
+    // progress tracking
+    year: i32,
+    days_idx: usize,
+    hours_idx: usize,
+    minutes_idx: usize,
     seconds_idx: usize,
+
+    // vector of year days
+    //  -1 = 31.12.YYYY-1
+    //   0 = 01.01.YYYY
+    //   1 = 02.01.YYYY
+    // 366 = 01.01.YYYY+1 (assuming YYYY is not a leap year)
+    //
+    // Rebuilt for each year the iterator steps into
+    days: Vec<i32>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -107,22 +116,28 @@ impl RRuleIter {
 
         let mut this = Self {
             recur,
-            tz: rrule.dt_start.0.tz,
+
+            dt_start,
+            dt_start_tz: rrule.dt_start.0.tz,
+
             freq: rrule.recur.freq,
-            dt_start_dt: dt_start,
             interval: rrule.recur.interval.unwrap_or(1),
-            step,
-            year: dt_start.year(),
-            days: vec![],
-            days_idx: 0,
-            hours,
-            hours_idx: 0,
-            minutes,
-            minutes_idx: 0,
-            seconds,
-            seconds_idx: 0,
             count: rrule.recur.count,
             week_start: rrule.recur.week_start.unwrap_or(Weekday::Monday),
+
+            step,
+
+            hours,
+            minutes,
+            seconds,
+
+            year: dt_start.year(),
+            days_idx: 0,
+            hours_idx: 0,
+            minutes_idx: 0,
+            seconds_idx: 0,
+
+            days: vec![],
         };
 
         // build days array
@@ -170,7 +185,7 @@ impl RRuleIter {
         let leap_year = is_leap_year(self.year);
         let year_len = if leap_year { 366 } else { 365 };
 
-        let dt_start_monthday1 = self.dt_start_dt.day();
+        let dt_start_monthday1 = self.dt_start.day();
 
         // BY MONTH
         for &month1 in &self.recur.by_month {
@@ -286,7 +301,7 @@ impl RRuleIter {
         // not sure about this
         if self.days.is_empty() {
             if let Some(date) =
-                NaiveDate::from_ymd_opt(self.year, self.dt_start_dt.month(), dt_start_monthday1)
+                NaiveDate::from_ymd_opt(self.year, self.dt_start.month(), dt_start_monthday1)
             {
                 self.days.push(date.ordinal0() as i32);
             } else {
@@ -299,7 +314,7 @@ impl RRuleIter {
 
     fn add_days_monthly(&mut self) {
         let leap_year = is_leap_year(self.year);
-        let dt_start_monthday1 = self.dt_start_dt.day();
+        let dt_start_monthday1 = self.dt_start.day();
 
         for month1 in months(&self.recur.by_month) {
             if self.recur.by_month_day.is_empty() {
@@ -351,7 +366,7 @@ impl RRuleIter {
         let first_weekday = first_day.weekday();
 
         let weekdays = if self.recur.by_day.is_empty() {
-            vec![self.dt_start_dt.weekday()]
+            vec![self.dt_start.weekday()]
         } else {
             self.recur
                 .by_day
@@ -437,7 +452,7 @@ impl RRuleIter {
     }
 
     fn to_yield(&self, datetime: NaiveDateTime) -> RRuleIterYield {
-        if let Some(tz) = self.tz {
+        if let Some(tz) = self.dt_start_tz {
             RRuleIterYield::DateTimeTz(local_datetime_with_tz(datetime, tz))
         } else {
             RRuleIterYield::DateTimeLocal(datetime)
