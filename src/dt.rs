@@ -65,11 +65,7 @@ impl Dt {
                     let naive_datetime = NaiveDateTime::new(naive_date, naive_time);
 
                     if is_utc {
-                        Ok(Self::DateTimeUtc(
-                            Utc.from_local_datetime(&naive_datetime)
-                                .single()
-                                .ok_or(DtParseError::InvalidTime)?,
-                        ))
+                        Ok(Self::DateTimeUtc(Utc.from_utc_datetime(&naive_datetime)))
                     } else {
                         Ok(Self::DateTimeLocal(naive_datetime))
                     }
