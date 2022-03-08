@@ -418,13 +418,50 @@ impl RRuleIter {
         }
     }
 
+    fn add_days_hourly_minutely_secondly(&mut self) {
+        let year_len = year_len(self.year) as i32;
+
+        for month1 in months(&self.recur.by_month) {
+            days(
+                self.year,
+                month1,
+                &self.recur.by_month_day,
+                &self.recur.by_day,
+                |yd| {
+                    let yd = yd as i32;
+
+                    // filter BYYEARDAY
+                    if !self.recur.by_year_day.is_empty()
+                        && !self.recur.by_year_day.iter().any(|&by_year_day| {
+                            if by_year_day > 0 && by_year_day <= year_len {
+                                let by_year_day = by_year_day - 1;
+
+                                yd == by_year_day
+                            } else if by_year_day < 0 && -by_year_day <= year_len {
+                                let by_year_day = year_len - (-by_year_day);
+
+                                yd == by_year_day
+                            } else {
+                                false
+                            }
+                        })
+                    {
+                        return;
+                    }
+
+                    self.days.push(yd);
+                },
+            )
+        }
+    }
+
     fn rebuild_days(&mut self) {
         self.days.clear();
 
         match self.recur.freq {
-            Frequency::Secondly => self.add_days_daily(),
-            Frequency::Minutely => self.add_days_daily(),
-            Frequency::Hourly => self.add_days_daily(),
+            Frequency::Secondly => self.add_days_hourly_minutely_secondly(),
+            Frequency::Minutely => self.add_days_hourly_minutely_secondly(),
+            Frequency::Hourly => self.add_days_hourly_minutely_secondly(),
             Frequency::Daily => self.add_days_daily(),
             Frequency::Weekly => self.add_days_weekly(),
             Frequency::Monthly => self.add_days_monthly(),
@@ -523,8 +560,8 @@ impl Iterator for RRuleIter {
             )
         };
 
-        let date = NaiveDate::from_ymd(year, month as u32, day as u32);
-        let datetime = date.and_hms(hour, minute, second);
+        let datetime =
+            NaiveDate::from_ymd(year, month as u32, day as u32).and_hms(hour, minute, second);
 
         for _ in 0..self.interval {
             (self.step)(self);
