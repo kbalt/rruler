@@ -1,12 +1,14 @@
 use crate::byday::ByDay;
 use crate::dt::Dt;
 use crate::dt_prop::DtStart;
-use crate::error::IResult;
+use crate::error::{IResult, ParseError};
 use crate::freq::Frequency;
 use crate::recur::Recur;
 use nom::bytes::complete::{tag, take_while1};
 use nom::combinator::map;
 use nom::sequence::{preceded, terminated, tuple};
+use nom::Finish;
+use std::str::FromStr;
 
 #[derive(Debug)]
 pub struct RRule {
@@ -191,5 +193,28 @@ impl RRule {
         }
 
         Ok(())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+
+pub enum RRuleFromStrError {
+    #[error(transparent)]
+    Parse(#[from] ParseError),
+    #[error("some input was not consumed: '{0}'")]
+    LeftOver(String),
+}
+
+impl FromStr for RRule {
+    type Err = RRuleFromStrError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (rem, rrule) = Self::parse(s).finish()?;
+
+        if rem.is_empty() {
+            Ok(rrule)
+        } else {
+            Err(RRuleFromStrError::LeftOver(rem.into()))
+        }
     }
 }
