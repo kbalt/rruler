@@ -1,11 +1,12 @@
 use crate::byday::ByDay;
+use crate::dt_prop::local_datetime_with_tz;
 use crate::freq::Frequency;
 use crate::mappings;
 use crate::recur::Recur;
 use crate::rrule::RRule;
 use crate::util::{is_leap_year, year_len};
 use crate::weekday::{days_until, Weekday};
-use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, TimeZone, Timelike};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, Timelike};
 use chrono_tz::Tz;
 use std::cmp::Ordering;
 
@@ -52,6 +53,7 @@ impl RRuleIter {
         let mut recur = rrule.recur.clone();
         recur.sort_and_dedup();
 
+        // Initialize hours vec
         let hours = if recur.by_hour.is_empty() {
             if matches!(
                 recur.freq,
@@ -65,6 +67,7 @@ impl RRuleIter {
             recur.by_hour.clone()
         };
 
+        // Initialize minutes vec
         let minutes = if recur.by_minute.is_empty() {
             if matches!(recur.freq, Frequency::Minutely | Frequency::Secondly) {
                 (0..60).collect()
@@ -75,6 +78,7 @@ impl RRuleIter {
             recur.by_minute.clone()
         };
 
+        // Initialize seconds vec
         let seconds = if recur.by_second.is_empty() {
             if matches!(recur.freq, Frequency::Secondly) {
                 (0..60).collect()
@@ -85,9 +89,15 @@ impl RRuleIter {
             recur.by_second.clone()
         };
 
+        // Set the highest possible step function to skip some checks.
+        // TODO: not sure if this is worth it, compiler might be smarter than this
         let step = if seconds.len() == 1 {
             if minutes.len() == 1 {
-                step_hour
+                if hours.len() == 1 {
+                    step_day
+                } else {
+                    step_hour
+                }
             } else {
                 step_minute
             }
@@ -120,21 +130,38 @@ impl RRuleIter {
 
         // skip all days before DTSTART
         let dt_start_yd = dt_start.ordinal0() as i32;
+        let dt_start_hour = dt_start.hour();
+        let dt_start_minute = dt_start.minute();
+        let dt_start_second = dt_start.second();
 
-        // Find day in current year and step to it
-        if let Some(i) = this.days.iter().position(|&yd| yd >= dt_start_yd) {
-            this.days_idx = i;
-        } else {
-            // No viable day in the year to step to.
-            // Skip the year by setting every index to max
-            // Then just step.
-            // TODO: kinda hacky, this may not work in every case, wrap in loop?
-            this.days_idx = this.days.len() - 1;
-            this.hours_idx = this.hours.len() - 1;
-            this.minutes_idx = this.minutes.len() - 1;
-            this.seconds_idx = this.seconds.len() - 1;
-            (this.step)(&mut this);
+        // Find day, hour, minute and second and step to it
+        if let Some(days_idx) = this.days.iter().position(|&yd| yd >= dt_start_yd) {
+            if let Some(hour_idx) = this.hours.iter().position(|&h| h >= dt_start_hour) {
+                if let Some(minutes_idx) = this.minutes.iter().position(|&m| m >= dt_start_minute) {
+                    if let Some(seconds_idx) =
+                        this.seconds.iter().position(|&s| s >= dt_start_second)
+                    {
+                        this.days_idx = days_idx;
+                        this.hours_idx = hour_idx;
+                        this.minutes_idx = minutes_idx;
+                        this.seconds_idx = seconds_idx;
+                        return this;
+                    }
+                }
+            }
         }
+
+        // == FALLTHROUGH ==
+
+        // No viable day in the year to step to.
+        // Skip the year by setting every index to max
+        // Then just step.
+        // TODO: kinda hacky, this may not work in every case, wrap in loop?
+        this.days_idx = this.days.len() - 1;
+        this.hours_idx = this.hours.len() - 1;
+        this.minutes_idx = this.minutes.len() - 1;
+        this.seconds_idx = this.seconds.len() - 1;
+        (this.step)(&mut this);
 
         this
     }
@@ -411,7 +438,7 @@ impl RRuleIter {
 
     fn to_yield(&self, datetime: NaiveDateTime) -> RRuleIterYield {
         if let Some(tz) = self.tz {
-            RRuleIterYield::DateTimeTz(tz.from_local_datetime(&datetime).unwrap())
+            RRuleIterYield::DateTimeTz(local_datetime_with_tz(datetime, tz))
         } else {
             RRuleIterYield::DateTimeLocal(datetime)
         }

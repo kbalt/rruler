@@ -1,6 +1,6 @@
 use crate::dt::Dt;
 use crate::error::{IResult, ParseError};
-use chrono::{DateTime, TimeZone};
+use chrono::{DateTime, NaiveDateTime, TimeZone};
 use chrono_tz::Tz;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, tag_no_case, take_while1};
@@ -53,13 +53,24 @@ pub struct DtProperty {
     pub tz: Option<Tz>,
 }
 
+/// See [RFC5545#3.3.5] FORM #3: DATE WITH LOCAL TIME AND TIME ZONE REFERENCE
+///
+/// [RFC5545#3.3.5]((https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.5))
+pub(crate) fn local_datetime_with_tz(datetime: NaiveDateTime, tz: Tz) -> DateTime<Tz> {
+    if let Some(datetime) = tz.from_local_datetime(&datetime).earliest() {
+        datetime
+    } else {
+        DateTime::from_utc(datetime, tz.offset_from_utc_datetime(&datetime))
+    }
+}
+
 impl DtProperty {
     pub(crate) fn to_datetime(self) -> DateTime<Tz> {
         let tz = self.tz.unwrap_or(Tz::UTC);
 
         match self.dt {
-            Dt::Date(date) => tz.from_local_date(&date).unwrap().and_hms(0, 0, 0),
-            Dt::DateTimeLocal(datetime) => tz.from_local_datetime(&datetime).unwrap(),
+            Dt::Date(date) => local_datetime_with_tz(date.and_hms(0, 0, 0), tz),
+            Dt::DateTimeLocal(datetime) => local_datetime_with_tz(datetime, tz),
             Dt::DateTimeUtc(datetime) => datetime.with_timezone(&tz),
         }
     }
