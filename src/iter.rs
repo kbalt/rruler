@@ -406,52 +406,62 @@ impl RRuleIter {
 
     fn add_days_daily(&mut self) {
         for month1 in months(&self.recur.by_month) {
-            days(
+            let days = days(
                 self.year,
                 month1,
                 &self.recur.by_month_day,
                 &self.recur.by_day,
-                |yd| {
-                    self.days.push(yd as i32);
-                },
-            )
+            );
+
+            for yd in days {
+                self.days.push(yd as i32);
+            }
         }
     }
 
     fn add_days_hourly_minutely_secondly(&mut self) {
+        fn matches_by_year_day(year_len: i32, yd: i32) -> impl Fn(&i32) -> bool {
+            move |&by_year_day| {
+                if by_year_day > 0 && by_year_day <= year_len {
+                    let by_year_day = by_year_day - 1;
+
+                    yd == by_year_day
+                } else if by_year_day < 0 && -by_year_day <= year_len {
+                    let by_year_day = year_len - (-by_year_day);
+
+                    yd == by_year_day
+                } else {
+                    false
+                }
+            }
+        }
+
         let year_len = year_len(self.year) as i32;
 
         for month1 in months(&self.recur.by_month) {
-            days(
+            let days = days(
                 self.year,
                 month1,
                 &self.recur.by_month_day,
                 &self.recur.by_day,
-                |yd| {
-                    let yd = yd as i32;
+            );
 
-                    // filter BYYEARDAY
-                    if !self.recur.by_year_day.is_empty()
-                        && !self.recur.by_year_day.iter().any(|&by_year_day| {
-                            if by_year_day > 0 && by_year_day <= year_len {
-                                let by_year_day = by_year_day - 1;
+            for yd in days {
+                let yd = yd as i32;
 
-                                yd == by_year_day
-                            } else if by_year_day < 0 && -by_year_day <= year_len {
-                                let by_year_day = year_len - (-by_year_day);
+                // filter BYYEARDAY
+                if !self.recur.by_year_day.is_empty()
+                    && !self
+                        .recur
+                        .by_year_day
+                        .iter()
+                        .any(matches_by_year_day(year_len, yd))
+                {
+                    continue;
+                }
 
-                                yd == by_year_day
-                            } else {
-                                false
-                            }
-                        })
-                    {
-                        return;
-                    }
-
-                    self.days.push(yd);
-                },
-            )
+                self.days.push(yd);
+            }
         }
     }
 
@@ -620,13 +630,18 @@ fn months(by_month: &[u32]) -> impl Iterator<Item = u32> + '_ {
     }
 }
 
-fn days(year: i32, month1: u32, by_month_day: &[i32], by_day: &[ByDay], mut f: impl FnMut(u32)) {
+fn days<'a>(
+    year: i32,
+    month1: u32,
+    by_month_day: &'a [i32],
+    by_day: &'a [ByDay],
+) -> impl Iterator<Item = u32> + 'a {
     let leap_year = is_leap_year(year);
 
     let days_in_month =
         mappings::days_in_month(leap_year, month1 - 1).expect("only valid months from 1-12");
 
-    for day0 in 0..days_in_month {
+    (0..days_in_month).filter_map(move |day0| {
         let day1 = day0 + 1;
 
         // filter BYMONTHDAY
@@ -643,26 +658,26 @@ fn days(year: i32, month1: u32, by_month_day: &[i32], by_day: &[ByDay], mut f: i
                 }
             })
         {
-            continue;
+            return None;
         }
 
-        if let Some(date) = NaiveDate::from_ymd_opt(year, month1, day1) {
-            let weekday = date.weekday();
+        let date = NaiveDate::from_ymd_opt(year, month1, day1)?;
 
-            // filter BYDAY
-            if !by_day.is_empty()
-                && !by_day.iter().any(|byday| {
-                    if let ByDay::All(wd) = byday {
-                        *wd == weekday
-                    } else {
-                        false
-                    }
-                })
-            {
-                continue;
-            }
+        let weekday = date.weekday();
 
-            f(date.ordinal0());
+        // filter BYDAY
+        if !by_day.is_empty()
+            && !by_day.iter().any(|byday| {
+                if let ByDay::All(wd) = byday {
+                    *wd == weekday
+                } else {
+                    false
+                }
+            })
+        {
+            return None;
         }
-    }
+
+        Some(date.ordinal0())
+    })
 }
