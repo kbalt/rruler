@@ -5,7 +5,7 @@ use nom::combinator::map;
 use nom::error::context;
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Weekday {
     Monday = 0,
     Tuesday = 1,
@@ -45,6 +45,18 @@ impl Weekday {
     pub(crate) fn offset_from(self, from: chrono::Weekday) -> u32 {
         days_until(from as u32, self as u32)
     }
+
+    pub(crate) fn to_chrono(self) -> chrono::Weekday {
+        match self {
+            Weekday::Monday => chrono::Weekday::Mon,
+            Weekday::Tuesday => chrono::Weekday::Tue,
+            Weekday::Wednesday => chrono::Weekday::Wed,
+            Weekday::Thursday => chrono::Weekday::Thu,
+            Weekday::Friday => chrono::Weekday::Fri,
+            Weekday::Saturday => chrono::Weekday::Sat,
+            Weekday::Sunday => chrono::Weekday::Sun,
+        }
+    }
 }
 
 impl fmt::Display for Weekday {
@@ -61,7 +73,7 @@ impl fmt::Display for Weekday {
     }
 }
 
-fn days_until(weekday: u32, until: u32) -> u32 {
+pub(crate) fn days_until(weekday: u32, until: u32) -> u32 {
     if weekday <= until {
         until - weekday
     } else {

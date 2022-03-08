@@ -1,3 +1,4 @@
+pub mod byday;
 pub mod dt;
 pub mod dt_prop;
 pub mod error;

@@ -55,19 +55,12 @@ pub struct DtProperty {
 
 impl DtProperty {
     pub(crate) fn to_datetime(self) -> DateTime<Tz> {
+        let tz = self.tz.unwrap_or(Tz::UTC);
+
         match self.dt {
-            Dt::Date(date) => self
-                .tz
-                .unwrap_or(Tz::UTC)
-                .from_local_date(&date)
-                .unwrap()
-                .and_hms(0, 0, 0),
-            Dt::DateTimeLocal(datetime) => self
-                .tz
-                .unwrap_or(Tz::UTC)
-                .from_local_datetime(&datetime)
-                .unwrap(),
-            Dt::DateTimeUtc(x) => x.with_timezone(&self.tz.unwrap_or(Tz::UTC)),
+            Dt::Date(date) => tz.from_local_date(&date).unwrap().and_hms(0, 0, 0),
+            Dt::DateTimeLocal(datetime) => tz.from_local_datetime(&datetime).unwrap(),
+            Dt::DateTimeUtc(datetime) => datetime.with_timezone(&tz),
         }
     }
 

@@ -1,8 +1,9 @@
+use crate::byday::ByDay;
 use crate::dt::Dt;
 use crate::dt_prop::DtStart;
 use crate::error::IResult;
 use crate::freq::Frequency;
-use crate::recur::{ByWeekday, Recur};
+use crate::recur::Recur;
 use nom::bytes::complete::{tag, take_while1};
 use nom::combinator::map;
 use nom::sequence::{preceded, terminated, tuple};
@@ -92,7 +93,14 @@ impl RRule {
         let mut by_day_offset_specified = false;
 
         for by_day in &self.recur.by_day {
-            if let ByWeekday::Nth(_, nth) = by_day {
+            if let ByDay::Nth(_, nth) = by_day {
+                if !matches!(self.recur.freq, Frequency::Yearly | Frequency::Monthly) {
+                    return Err(RRuleVerifyError::NotAllowedInFreq(
+                        "BDAY nth",
+                        self.recur.freq,
+                    ));
+                }
+
                 if !matches!(nth, 1..=53 | -53..=-1) {
                     return Err(RRuleVerifyError::InvalidValue("BYDAY nth", *nth));
                 }

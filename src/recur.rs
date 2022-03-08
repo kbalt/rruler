@@ -1,3 +1,4 @@
+use crate::byday::ByDay;
 use crate::dt::Dt;
 use crate::error::IResult;
 use crate::freq::Frequency;
@@ -7,47 +8,8 @@ use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::combinator::{cut, map, map_res};
 use nom::error::context;
-use nom::sequence::{preceded, tuple};
+use nom::sequence::preceded;
 use std::fmt;
-
-#[derive(Debug, Clone)]
-pub enum ByWeekday {
-    All(Weekday),
-    Nth(Weekday, i32),
-}
-
-#[derive(Debug, thiserror::Error)]
-#[error("invalid nth {0} for weekday")]
-pub struct InvalidNth(i32);
-
-impl ByWeekday {
-    fn parse(i: &str) -> IResult<&str, Self> {
-        alt((
-            map_res(
-                tuple((parse_i32, cut(Weekday::parse))),
-                |(nth, weekday)| -> Result<Self, InvalidNth> {
-                    if !matches!(nth, 1..=53 | -53..=-1) {
-                        return Err(InvalidNth(nth));
-                    }
-
-                    Ok(Self::Nth(weekday, nth))
-                },
-            ),
-            map(Weekday::parse, Self::All),
-        ))(i)
-    }
-}
-
-impl fmt::Display for ByWeekday {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ByWeekday::All(weekday) => weekday.fmt(f),
-            ByWeekday::Nth(weekday, nth) => {
-                write!(f, "{}{}", nth, weekday)
-            }
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct Recur {
@@ -58,7 +20,7 @@ pub struct Recur {
     pub by_second: Vec<u32>,
     pub by_minute: Vec<u32>,
     pub by_hour: Vec<u32>,
-    pub by_day: Vec<ByWeekday>,
+    pub by_day: Vec<ByDay>,
     pub by_month_day: Vec<i32>,
     pub by_year_day: Vec<i32>,
     pub by_week_no: Vec<i32>,
@@ -75,7 +37,7 @@ pub enum RecurRulePart {
     BySecond(Vec<u32>),
     ByMinute(Vec<u32>),
     ByHour(Vec<u32>),
-    ByDay(Vec<ByWeekday>),
+    ByDay(Vec<ByDay>),
     ByMonthDay(Vec<i32>),
     ByYearDay(Vec<i32>),
     ByWeekNo(Vec<i32>),
@@ -106,7 +68,7 @@ impl RecurRulePart {
                     Self::ByHour,
                 ),
                 map(
-                    preceded(tag("BYDAY="), cut(parse_list(ByWeekday::parse, ','))),
+                    preceded(tag("BYDAY="), cut(parse_list(ByDay::parse, ','))),
                     Self::ByDay,
                 ),
                 map(
@@ -192,7 +154,7 @@ impl Recur {
                             by_second = b;
                         }
                         RecurRulePart::ByMinute(b) => {
-                            ensure!(by_hour.is_empty(), "BYMINUTE");
+                            ensure!(by_minute.is_empty(), "BYMINUTE");
                             by_minute = b;
                         }
                         RecurRulePart::ByHour(b) => {
@@ -251,6 +213,28 @@ impl Recur {
                 Ok(this)
             },
         )(i)
+    }
+
+    pub(crate) fn sort_and_dedup(&mut self) {
+        self.by_second.sort_unstable();
+        self.by_minute.sort_unstable();
+        self.by_hour.sort_unstable();
+        self.by_day.sort_unstable();
+        self.by_month_day.sort_unstable();
+        self.by_year_day.sort_unstable();
+        self.by_week_no.sort_unstable();
+        self.by_month.sort_unstable();
+        self.by_set_pos.sort_unstable();
+
+        self.by_second.dedup();
+        self.by_minute.dedup();
+        self.by_hour.dedup();
+        self.by_day.dedup();
+        self.by_month_day.dedup();
+        self.by_year_day.dedup();
+        self.by_week_no.dedup();
+        self.by_month.dedup();
+        self.by_set_pos.dedup();
     }
 }
 
