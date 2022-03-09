@@ -75,6 +75,16 @@ impl DtProperty {
         }
     }
 
+    pub(crate) fn result_tz(self) -> Option<Tz> {
+        if self.tz.is_some() {
+            self.tz
+        } else if let Dt::DateTimeUtc(_) = self.dt {
+            Some(Tz::UTC)
+        } else {
+            None
+        }
+    }
+
     fn parse(i: &str) -> IResult<&str, Self> {
         context(
             "invalid dt property",

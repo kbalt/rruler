@@ -21,7 +21,6 @@ pub struct RRuleIter {
     // Timezone of DTSTART, None if DTSTART is floating
     dt_start_tz: Option<Tz>,
 
-    freq: Frequency,
     interval: u32,
     count: Option<u32>,
     week_start: Weekday,
@@ -58,6 +57,7 @@ pub enum RRuleIterYield {
 impl RRuleIter {
     pub fn new(rrule: &RRule) -> Self {
         let dt_start = rrule.dt_start.0.to_datetime();
+        let dt_start_tz = rrule.dt_start.0.result_tz();
 
         let mut recur = rrule.recur.clone();
         recur.sort_and_dedup();
@@ -118,9 +118,8 @@ impl RRuleIter {
             recur,
 
             dt_start,
-            dt_start_tz: rrule.dt_start.0.tz,
+            dt_start_tz,
 
-            freq: rrule.recur.freq,
             interval: rrule.recur.interval.unwrap_or(1),
             count: rrule.recur.count,
             week_start: rrule.recur.week_start.unwrap_or(Weekday::Monday),
