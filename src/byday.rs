@@ -256,8 +256,6 @@ fn nth_weekday_in_year(year: i32, weekday: Weekday, nth: i32) -> Option<i32> {
         Ordering::Equal => return None,
     };
 
-    assert!(yd > 0);
-
     if yd >= 0 && yd < year_len as i32 {
         Some(yd)
     } else {
