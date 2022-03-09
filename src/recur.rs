@@ -5,13 +5,16 @@ use crate::freq::Frequency;
 use crate::util::{display_list, parse_i32, parse_list, parse_u32};
 use crate::weekday::Weekday;
 use nom::branch::alt;
+use nom::character::complete::char;
 use nom::bytes::complete::tag;
-use nom::combinator::{cut, map, map_res};
+use nom::combinator::{cut, map, map_res, opt};
 use nom::error::context;
-use nom::sequence::preceded;
+use nom::multi::many1;
+use nom::sequence::{preceded, terminated};
 use std::fmt;
 
-#[derive(Debug, Clone)]
+// TODO custom partial eq which disregards ordering of fields
+#[derive(Debug, Clone, PartialEq,Eq, PartialOrd, Ord, Hash)]
 pub struct Recur {
     pub freq: Frequency,
     pub until: Option<Dt>,
@@ -114,7 +117,7 @@ pub enum RecurParseError {
 impl Recur {
     pub fn parse(i: &str) -> IResult<&str, Self> {
         map_res(
-            parse_list(RecurRulePart::parse, ';'),
+            many1(terminated(RecurRulePart::parse, opt(char(';')))),
             |items| -> Result<Self, RecurParseError> {
                 let mut freq = None;
                 let mut until = None;
@@ -242,30 +245,30 @@ impl fmt::Display for Recur {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "FREQ={}", self.freq)?;
 
-        if let Some(until) = self.until {
-            write!(f, ";UNTIL={}", until)?;
+        if let Some(interval) = self.interval {
+            write!(f, ";INTERVAL={}", interval)?;
+        }
+
+        display_list(f, "BYMONTH", &self.by_month)?;
+        display_list(f, "BYWEEKNO", &self.by_week_no)?;
+        display_list(f, "BYYEARDAY", &self.by_year_day)?;
+        display_list(f, "BYMONTHDAY", &self.by_month_day)?;
+        display_list(f, "BYDAY", &self.by_day)?;
+        display_list(f, "BYHOUR", &self.by_hour)?;
+        display_list(f, "BYMINUTE", &self.by_minute)?;
+        display_list(f, "BYSECOND", &self.by_second)?;
+        display_list(f, "BYSETPOS", &self.by_set_pos)?;
+
+        if let Some(week_start) = self.week_start {
+            write!(f, ";WKST={}", week_start)?;
         }
 
         if let Some(count) = self.count {
             write!(f, ";COUNT={}", count)?;
         }
 
-        if let Some(interval) = self.interval {
-            write!(f, ";INTERVAL={}", interval)?;
-        }
-
-        display_list(f, "BYSECOND", &self.by_second)?;
-        display_list(f, "BYMINUTE", &self.by_minute)?;
-        display_list(f, "BYHOUR", &self.by_hour)?;
-        display_list(f, "BYDAY", &self.by_day)?;
-        display_list(f, "BYMONTHDAY", &self.by_month_day)?;
-        display_list(f, "BYYEARDAY", &self.by_year_day)?;
-        display_list(f, "BYWEEKNO", &self.by_week_no)?;
-        display_list(f, "BYMONTH", &self.by_month)?;
-        display_list(f, "BYSETPOS", &self.by_set_pos)?;
-
-        if let Some(week_start) = self.week_start {
-            write!(f, ";WKST={}", week_start)?;
+        if let Some(until) = self.until {
+            write!(f, ";UNTIL={}", until)?;
         }
 
         Ok(())

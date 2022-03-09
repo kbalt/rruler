@@ -9,3 +9,9 @@ chrono = "0.4"
 chrono-tz = "0.6"
 nom = "7"
 thiserror = "1"
+
+[dev-dependencies]
+pretty_assertions = "1"
+
+rrule = "0.7"
+itertools = "0.10"

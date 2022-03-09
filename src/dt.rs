@@ -7,7 +7,7 @@ use nom::sequence::{preceded, tuple};
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq,Eq, PartialOrd, Ord, Hash)]
 pub enum Dt {
     Date(NaiveDate),
     DateTimeLocal(NaiveDateTime),

@@ -47,7 +47,7 @@ pub enum DtPropertyParseError {
     InvalidValueParam(&'static str, &'static str),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq,Eq, Hash)]
 pub struct DtProperty {
     pub dt: Dt,
     pub tz: Option<Tz>,
@@ -172,7 +172,7 @@ impl fmt::Display for DtProperty {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq,Eq, Hash)]
 pub struct DtStart(pub DtProperty);
 
 impl DtStart {

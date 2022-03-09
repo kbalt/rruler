@@ -1,7 +1,9 @@
 use std::ops::Range;
 
+use crate::util::{days_in_year, is_leap_year};
+
 #[rustfmt::skip]
-pub static YEARDAY_TO_MONTH_NORMAL: [u8; 365] = [
+pub static YEARDAY_TO_MONTH_NORMAL: [u8; 365 + 7] = [
     // January - 31
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     // February - 28
@@ -29,10 +31,12 @@ pub static YEARDAY_TO_MONTH_NORMAL: [u8; 365] = [
     // December - 31
     12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
     12, 12, 12, 12, 12, 12, 12,
+    // Next year January
+    1, 1, 1, 1, 1, 1, 1
 ];
 
 #[rustfmt::skip]
-pub static YEARDAY_TO_MONTH_LEAPYEAR: [u8; 366] = [
+pub static YEARDAY_TO_MONTH_LEAPYEAR: [u8; 366 + 7] = [
     // January - 31
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     // February - 29
@@ -60,15 +64,27 @@ pub static YEARDAY_TO_MONTH_LEAPYEAR: [u8; 366] = [
     // December - 31
     12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
     12, 12, 12, 12, 12, 12, 12,
+    // Next year January
+    1, 1, 1, 1, 1, 1, 1
 ];
 
-pub(crate) fn yearday_to_month(leap_year: bool, yd: u32) -> Option<u32> {
-    if leap_year {
-        YEARDAY_TO_MONTH_LEAPYEAR
-            .get(yd as usize)
-            .map(|&x| x as u32)
+pub(crate) fn yearday_to_month1(mut year: i32, mut yd: i32) -> u32 {
+    let year_len = days_in_year(year) as i32;
+
+    if yd < 0 {
+        yd += year_len;
+        year -= 1;
+    }
+
+    if yd >= year_len {
+        yd -= year_len;
+        year += 1;
+    }
+
+    if is_leap_year(year) {
+        YEARDAY_TO_MONTH_LEAPYEAR[yd as usize] as u32
     } else {
-        YEARDAY_TO_MONTH_NORMAL.get(yd as usize).map(|&x| x as u32)
+        YEARDAY_TO_MONTH_NORMAL[yd as usize] as u32
     }
 }
 
@@ -152,6 +168,24 @@ pub static YEARDAY_TO_DAY_LEAPYEAR: [u8; 366] = [
     27, 28, 29, 30, 31,
 ];
 
+pub(crate) fn yearday_to_monthday1(mut year: i32, mut yd: i32) -> u32 {
+    let year_len = days_in_year(year) as i32;
+
+    if yd < 0 {
+        year -= 1;
+        yd += days_in_year(year) as i32;
+    } else if yd >= year_len {
+        year += 1;
+        yd -= days_in_year(year) as i32;
+    }
+
+    if is_leap_year(year) {
+        YEARDAY_TO_DAY_LEAPYEAR[yd as usize] as u32
+    } else {
+        YEARDAY_TO_DAY_NORMAL[yd as usize] as u32
+    }
+}
+
 pub static MONTH_TO_YEARDAYS_NORMAL: [Range<u32>; 12] = [
     // January - 31
     0..31,
@@ -206,8 +240,8 @@ pub static MONTH_TO_YEARDAYS_LEAPYEAR: [Range<u32>; 12] = [
     335..366,
 ];
 
-pub(crate) fn days_in_month(leap_year: bool, month0: u32) -> Option<u32> {
-    if leap_year {
+pub(crate) fn days_in_month(year: i32, month0: u32) -> Option<u32> {
+    if is_leap_year(year) {
         MONTH_TO_YEARDAYS_LEAPYEAR
             .get(month0 as usize)
             .map(|x| x.end - x.start)

@@ -10,10 +10,10 @@ use nom::sequence::{preceded, terminated, tuple};
 use nom::Finish;
 use std::str::FromStr;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq,Eq, Hash)]
 pub struct RRule {
-    pub(crate) dt_start: DtStart,
-    pub(crate) recur: Recur,
+    pub dt_start: DtStart,
+    pub recur: Recur,
 }
 
 #[derive(Debug, thiserror::Error)]

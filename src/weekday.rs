@@ -5,7 +5,7 @@ use nom::combinator::map;
 use nom::error::context;
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Weekday {
     Monday = 0,
     Tuesday = 1,

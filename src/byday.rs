@@ -1,6 +1,6 @@
 use crate::error::IResult;
 use crate::mappings;
-use crate::util::{is_leap_year, parse_i32, year_len};
+use crate::util::{days_in_year, is_leap_year, parse_i32};
 use crate::weekday::Weekday;
 use chrono::{Datelike, NaiveDate};
 use nom::branch::alt;
@@ -9,7 +9,7 @@ use nom::sequence::tuple;
 use std::cmp::Ordering;
 use std::fmt;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ByDay {
     All(Weekday),
     Nth(Weekday, i32),
@@ -191,7 +191,7 @@ impl DaysInYearIterator {
         match byday {
             ByDay::All(weekday) => {
                 let first_year_day = NaiveDate::from_yo(year, 1);
-                let year_len = year_len(year) as i32;
+                let year_len = days_in_year(year) as i32;
                 let base_offset = weekday.offset_from(first_year_day.weekday()) as i32;
 
                 Self::All {
@@ -232,7 +232,7 @@ impl Iterator for DaysInYearIterator {
 }
 
 fn nth_weekday_in_year(year: i32, weekday: Weekday, nth: i32) -> Option<i32> {
-    let year_len = year_len(year);
+    let year_len = days_in_year(year);
 
     let yd = match nth.cmp(&0) {
         Ordering::Less => {
