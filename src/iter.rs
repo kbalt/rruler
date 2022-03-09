@@ -25,8 +25,6 @@ pub struct RRuleIter {
     count: Option<u32>,
     week_start: Weekday,
 
-    step: fn(&mut RRuleIter),
-
     hours: Vec<u32>,
     minutes: Vec<u32>,
     seconds: Vec<u32>,
@@ -37,6 +35,11 @@ pub struct RRuleIter {
     hours_idx: usize,
     minutes_idx: usize,
     seconds_idx: usize,
+
+    // nth recurrence
+    position: usize,
+    positions: usize,
+    by_positions: Vec<usize>,
 
     // vector of year days
     //  -1 = 31.12.YYYY-1
@@ -98,22 +101,6 @@ impl RRuleIter {
             recur.by_second.clone()
         };
 
-        // Set the highest possible step function to skip some checks.
-        // TODO: not sure if this is worth it, compiler might be smarter than this
-        let step = if seconds.len() == 1 {
-            if minutes.len() == 1 {
-                if hours.len() == 1 {
-                    step_day
-                } else {
-                    step_hour
-                }
-            } else {
-                step_minute
-            }
-        } else {
-            step_second
-        };
-
         let mut this = Self {
             recur,
 
@@ -123,8 +110,6 @@ impl RRuleIter {
             interval: rrule.recur.interval.unwrap_or(1),
             count: rrule.recur.count,
             week_start: rrule.recur.week_start.unwrap_or(Weekday::Monday),
-
-            step,
 
             hours,
             minutes,
@@ -136,11 +121,15 @@ impl RRuleIter {
             minutes_idx: 0,
             seconds_idx: 0,
 
+            position: 0,
+            positions: 0,
+            by_positions: vec![],
+
             days: vec![],
         };
 
         // build days array
-        this.rebuild_days();
+        this.rebuild_year();
 
         // skip all days before DTSTART
         let dt_start_yd = dt_start.ordinal0() as i32;
@@ -175,7 +164,7 @@ impl RRuleIter {
         this.hours_idx = this.hours.len() - 1;
         this.minutes_idx = this.minutes.len() - 1;
         this.seconds_idx = this.seconds.len() - 1;
-        (this.step)(&mut this);
+        step_second(&mut this);
 
         this
     }
@@ -464,17 +453,52 @@ impl RRuleIter {
         }
     }
 
-    fn rebuild_days(&mut self) {
+    fn rebuild_year(&mut self) {
         self.days.clear();
 
         match self.recur.freq {
-            Frequency::Secondly => self.add_days_hourly_minutely_secondly(),
-            Frequency::Minutely => self.add_days_hourly_minutely_secondly(),
-            Frequency::Hourly => self.add_days_hourly_minutely_secondly(),
-            Frequency::Daily => self.add_days_daily(),
-            Frequency::Weekly => self.add_days_weekly(),
-            Frequency::Monthly => self.add_days_monthly(),
-            Frequency::Yearly => self.add_days_yearly(),
+            Frequency::Secondly => {
+                self.add_days_hourly_minutely_secondly();
+            }
+            Frequency::Minutely => {
+                self.add_days_hourly_minutely_secondly();
+            }
+            Frequency::Hourly => {
+                self.add_days_hourly_minutely_secondly();
+            }
+            Frequency::Daily => {
+                self.add_days_daily();
+            }
+            Frequency::Weekly => {
+                self.add_days_weekly();
+            }
+            Frequency::Monthly => {
+                self.add_days_monthly();
+            }
+            Frequency::Yearly => {
+                self.add_days_yearly();
+
+                // rebuilt positions
+                self.position = 0;
+                self.positions =
+                    self.days.len() * self.hours.len() * self.minutes.len() * self.seconds.len();
+                self.by_positions.clear();
+
+                for &by_set_pos in &self.recur.by_set_pos {
+                    let positions = self.positions as i32;
+
+                    let position = match by_set_pos.cmp(&0) {
+                        Ordering::Less if -by_set_pos <= positions => by_set_pos + positions,
+                        Ordering::Greater if by_set_pos <= positions => by_set_pos - 1,
+                        _ => continue,
+                    };
+
+                    self.by_positions.push(position as usize);
+                }
+
+                self.by_positions.sort_unstable();
+                self.by_positions.dedup();
+            }
         }
 
         self.days.sort_unstable();
@@ -525,6 +549,13 @@ impl Iterator for RRuleIter {
             return None;
         }
 
+        if !self.by_positions.is_empty() {
+            // todo spin limit
+            while !self.by_positions.contains(&self.position) {
+                step_second(self);
+            }
+        }
+
         let second = self.seconds[self.seconds_idx];
         let minute = self.minutes[self.minutes_idx];
         let hour = self.hours[self.hours_idx];
@@ -572,37 +603,49 @@ impl Iterator for RRuleIter {
         let datetime =
             NaiveDate::from_ymd(year, month as u32, day as u32).and_hms(hour, minute, second);
 
-        for _ in 0..self.interval {
-            (self.step)(self);
-        }
+        step_second(self);
 
         Some(self.to_yield(datetime))
     }
 }
 
 fn step_second(this: &mut RRuleIter) {
-    this.seconds_idx += 1;
+    this.position += 1;
 
-    if this.seconds_idx == this.seconds.len() {
-        this.seconds_idx = 0;
+    if this.recur.freq == Frequency::Secondly {
+        this.seconds_idx += this.interval as usize;
+    } else {
+        this.seconds_idx += 1;
+    }
+
+    while this.seconds_idx >= this.seconds.len() {
+        this.seconds_idx -= this.seconds.len();
         step_minute(this);
     }
 }
 
 fn step_minute(this: &mut RRuleIter) {
-    this.minutes_idx += 1;
+    if this.recur.freq == Frequency::Minutely {
+        this.minutes_idx += this.interval as usize;
+    } else {
+        this.minutes_idx += 1;
+    }
 
-    if this.minutes_idx == this.minutes.len() {
-        this.minutes_idx = 0;
+    while this.minutes_idx >= this.minutes.len() {
+        this.minutes_idx -= this.minutes.len();
         step_hour(this);
     }
 }
 
 fn step_hour(this: &mut RRuleIter) {
-    this.hours_idx += 1;
+    if this.recur.freq == Frequency::Hourly {
+        this.hours_idx += this.interval as usize
+    } else {
+        this.hours_idx += 1;
+    }
 
-    if this.hours_idx == this.hours.len() {
-        this.hours_idx = 0;
+    while this.hours_idx >= this.hours.len() {
+        this.hours_idx -= this.hours.len();
         step_day(this);
     }
 }
@@ -613,8 +656,8 @@ fn step_day(this: &mut RRuleIter) {
     if this.days_idx == this.days.len() {
         this.days_idx = 0;
 
-        this.year += 1;
-        this.rebuild_days();
+        this.year += this.interval as i32;
+        this.rebuild_year();
     }
 }
 
